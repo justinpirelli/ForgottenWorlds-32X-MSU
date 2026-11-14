@@ -1,4 +1,3 @@
-c
 
 #ifndef CPS1_BLITTER_H
 #define CPS1_BLITTER_H
