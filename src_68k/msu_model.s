@@ -75,4 +75,3 @@ msu_stop:
         move.w  #0x0000, SCD_COMM_CMD   | Command 0x0000 = Stop Audio
         move.b  #0x01, SCD_COMM_FLAG
         rts
-
