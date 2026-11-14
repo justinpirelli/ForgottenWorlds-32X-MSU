@@ -20,7 +20,20 @@ c
 void init_32x_vdp(void) {
     // 0x0001 = 256-Color Packed Pixel Mode (320x224)
     SH2_VDP_MODE = 0x0001;
+
+    // Populate the 32X VDP Line Table (first 256 words of both framebuffer banks)
+    volatile uint16_t *line_table = (volatile uint16_t *)0x24000000;
+    for (int bank = 0; bank < 2; bank++) {
+        SH2_VDP_FBCTL = bank;
+        while ((SH2_VDP_FBCTL & 0x0001) != bank); // Wait for bank swap
+
+        for (int line = 0; line < 224; line++) {
+            // Each line starts at word offset 0x100 (byte 0x200) + line * 160 words (320 bytes)
+            line_table[line] = 0x0100 + (line * 160);
+        }
+    }
 }
+
 
 // ============================================================================
 // Master SH-2 Entry Point (VDP Control, Palette Sync & Background Layers)
