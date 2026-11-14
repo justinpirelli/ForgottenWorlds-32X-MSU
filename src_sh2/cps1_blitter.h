@@ -6,7 +6,7 @@ c
 #include <stdint.h>
 
 // 32X Framebuffer & CRAM (Color Palette RAM) Addresses (SH-2 Cache-Through Space)
-#define MARS_FB_BASE        ((volatile uint8_t *)0x24000000)
+#define MARS_FB_BASE        ((volatile uint8_t *)0x24000200)
 #define MARS_CRAM_BASE      ((volatile uint16_t *)0x24000200) // Wait: 32X CRAM is at 0x20004200
 #define MARS_PALETTE_RAM    ((volatile uint16_t *)0x20004200)
 
