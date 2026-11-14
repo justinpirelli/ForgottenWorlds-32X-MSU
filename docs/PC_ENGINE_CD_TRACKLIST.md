@@ -1,4 +1,3 @@
-markdown
 
 # PC Engine Super CD-ROM² to CPS-1 Sound ID Mapping
 
