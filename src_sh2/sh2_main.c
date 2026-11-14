@@ -1,4 +1,3 @@
-c
 
 #include <stdint.h>
 #include "cps1_blitter.h"
