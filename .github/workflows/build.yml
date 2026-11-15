@@ -1,0 +1,42 @@
+name: Build 32X + Sega CD Mode 1 ROM
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-32x-rom:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install m68k & sh2 Cross-Compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc-m68k-linux-gnu binutils-m68k-linux-gnu gcc-sh4-linux-gnu binutils-sh4-linux-gnu
+
+      - name: Create Compiler Symlinks for Makefile
+        run: |
+          mkdir -p $HOME/bin
+          ln -s /usr/bin/m68k-linux-gnu-gcc $HOME/bin/m68k-elf-gcc
+          ln -s /usr/bin/m68k-linux-gnu-as $HOME/bin/m68k-elf-as
+          ln -s /usr/bin/m68k-linux-gnu-ld $HOME/bin/m68k-elf-ld
+          ln -s /usr/bin/m68k-linux-gnu-objcopy $HOME/bin/m68k-elf-objcopy
+          ln -s /usr/bin/sh4-linux-gnu-gcc $HOME/bin/sh-elf-gcc
+          ln -s /usr/bin/sh4-linux-gnu-as $HOME/bin/sh-elf-as
+          ln -s /usr/bin/sh4-linux-gnu-ld $HOME/bin/sh-elf-ld
+          ln -s /usr/bin/sh4-linux-gnu-objcopy $HOME/bin/sh-elf-objcopy
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Compile fw32x.32x ROM
+        run: make
+
+      - name: Upload Compiled .32x Test ROM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForgottenWorlds32X-TestBuild
+          path: out/fw32x.32x
