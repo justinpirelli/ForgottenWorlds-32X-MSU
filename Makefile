@@ -61,7 +61,7 @@ $(BUILD_DIR)/sh2_code.elf: $(BUILD_DIR)/sh2_boot.o $(BUILD_DIR)/sh2_main.o $(BUI
 	$(SH2_LD) -EB -Ttext 0x06000000 $^ -o $@
 
 $(BUILD_DIR)/sh2_code.bin: $(BUILD_DIR)/sh2_code.elf
-	$(SH2_OBJCOPY) -O binary $< $@
+	$(SH2_OBJCOPY) -O binary -j .text -j .rodata -j .data $< $@
 
 # Wrap SH-2 binary into a 68000 linkable object (.sh2_binary section)
 $(BUILD_DIR)/sh2_blob.o: $(BUILD_DIR)/sh2_code.bin
