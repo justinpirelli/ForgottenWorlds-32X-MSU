@@ -21,6 +21,7 @@ typedef struct {
     const CPS1_TileEntry *tilemap;      // Pointer to 64x64 tilemap array (4096 entries)
     int16_t               scroll_x;     // Layer X scroll offset in pixels
     int16_t               scroll_y;     // Layer Y scroll offset in pixels
+    const int16_t        *row_scroll;   // Optional per-scanline X offset table (224 entries, NULL if unused)
 } CPS1_ScrollLayer;
 
 // Layer Renderers
