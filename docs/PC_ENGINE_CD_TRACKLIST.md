@@ -17,3 +17,22 @@ To build the companion audio disc for Sega CD Mode 1 playback, rip the Redbook a
 | **Track 10** | `0x09` | Final Boss: Emperor Bios | Yes |
 | **Track 11** | `0x0A` | Ending & Credits | No |
 | **Track 12** | `0x0B` | Game Over | No |
+
+## How to Create `track01.bin` (Dummy Mode 1 Data Track)
+
+The Sega CD BIOS requires **Track 01** to be a valid `MODE1/2048` data track at least **4 seconds (300 sectors = 614,400 bytes)** long before it will read Redbook audio tracks (`Track 02+`).
+
+Generate a compliant `track01.bin` file in one command, then burn it alongside your ripped `track02.wav`–`track12.wav` files using [`docs/ForgottenWorlds_MSU.cue`](ForgottenWorlds_MSU.cue):
+
+- **macOS / Linux:**
+  ```bash
+  dd if=/dev/zero of=track01.bin bs=2048 count=300
+  ```
+- **Windows (Command Prompt):**
+  ```cmd
+  fsutil file createnew track01.bin 614400
+  ```
+- **Python (Any OS):**
+  ```bash
+  python3 -c "open('track01.bin','wb').write(b'\x00'*614400)"
+  ```
