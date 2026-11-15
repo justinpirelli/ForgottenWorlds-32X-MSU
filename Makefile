@@ -25,7 +25,7 @@ TARGET_ROM   = $(OUT_DIR)/fw32x.32x
 # Source Files
 SCD_SRC      = src_scd/sub_cpu.s
 SH2_ASM_SRC  = src_sh2/sh2_boot.s
-SH2_C_SRC    = src_sh2/sh2_main.c src_sh2/cps1_blitter.c src_sh2/cps1_scroll.c
+SH2_C_SRC    = src_sh2/sh2_main.c src_sh2/cps1_blitter.c src_sh2/cps1_scroll.c src_sh2/pwm_audio.c
 M68K_ASM_SRC = src_68k/boot_32x.s src_68k/msu_mode1.s
 M68K_C_SRC   = src_68k/main_68k.c
 
@@ -60,7 +60,10 @@ $(BUILD_DIR)/cps1_blitter.o: src_sh2/cps1_blitter.c src_sh2/cps1_blitter.h
 $(BUILD_DIR)/cps1_scroll.o: src_sh2/cps1_scroll.c src_sh2/cps1_scroll.h src_sh2/cps1_blitter.h
 	$(SH2_CC) $(SH2_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/sh2_code.elf: $(BUILD_DIR)/sh2_boot.o $(BUILD_DIR)/sh2_main.o $(BUILD_DIR)/cps1_blitter.o $(BUILD_DIR)/cps1_scroll.o
+$(BUILD_DIR)/pwm_audio.o: src_sh2/pwm_audio.c src_sh2/pwm_audio.h
+	$(SH2_CC) $(SH2_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sh2_code.elf: $(BUILD_DIR)/sh2_boot.o $(BUILD_DIR)/sh2_main.o $(BUILD_DIR)/cps1_blitter.o $(BUILD_DIR)/cps1_scroll.o $(BUILD_DIR)/pwm_audio.o
 	$(SH2_LD) -EB -Ttext 0x06000000 $^ -o $@
 
 $(BUILD_DIR)/sh2_code.bin: $(BUILD_DIR)/sh2_code.elf
