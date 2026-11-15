@@ -70,8 +70,8 @@ mars_header:
         .long   _sh2_blob_size          | 0x3D8: SH-2 Code Size in Bytes
         .long   0x06000000              | 0x3DC: Master SH-2 SDRAM Load Address
         .long   0x06000000              | 0x3E0: Slave SH-2 SDRAM Load Address
-        .long   master_sh2_entry        | 0x3E4: Master SH-2 Initial PC
-        .long   slave_sh2_entry         | 0x3E8: Slave SH-2 Initial PC
+        .long   0x06000000              | 0x3E4: Master SH-2 Initial PC
+        .long   0x06000008              | 0x3E8: Slave SH-2 Initial PC
         .long   0x0603F800              | 0x3EC: Master SH-2 Stack Pointer
         .long   0x0603FC00              | 0x3F0: Slave SH-2 Stack Pointer
         .long   0x00000000              | 0x3F4: Reserved
