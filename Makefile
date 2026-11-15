@@ -4,7 +4,7 @@
 
 # Toolchains (Standard marsdev / GCC cross-compiler prefixes)
 M68K_CC      = m68k-elf-gcc
-M68K_AS      = m68k-elf-as
+M68K_AS      = m68k-elf-as --register-prefix-optional
 M68K_LD      = m68k-elf-ld
 M68K_OBJCOPY = m68k-elf-objcopy
 
