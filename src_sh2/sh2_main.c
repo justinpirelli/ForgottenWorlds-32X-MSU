@@ -17,6 +17,7 @@
 
 // Cartridge ROM Offset for Converted 8-bit CPS-1 Sprite Tiles (2MB mark)
 #define CART_SPRITE_ROM     ((const uint8_t *)0x22200000)
+#define CART_SFX_TABLE      ((const PWM_SampleAsset *)0x22300000)
 
 static uint16_t sh2_frame_num = 0;
 
