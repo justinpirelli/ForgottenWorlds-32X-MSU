@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "cps1_blitter.h"
+#include "cps1_scroll.h"
 
 // 32X SH-2 System & VDP Registers (Cache-Through Space)
 #define SH2_MARS_COMM0      (*(volatile uint16_t *)0x20004020) // Command from 68000
@@ -14,6 +15,8 @@
 
 // Cartridge ROM Offset for Converted 8-bit CPS-1 Sprite Tiles (2MB mark)
 #define CART_SPRITE_ROM     ((const uint8_t *)0x22200000)
+
+static uint16_t sh2_frame_num = 0;
 
 void init_32x_vdp(void) {
     // 0x0001 = 256-Color Packed Pixel Mode (320x224)
@@ -48,8 +51,14 @@ void master_sh2_main(void) {
             uint16_t fb = SH2_VDP_FBCTL & 0x0001;
             SH2_VDP_FBCTL = fb ^ 0x0001;
 
+            #ifdef USE_CPS1_ARCADE_ROM
             // Sync CPS-1 256-color palette to 32X CRAM
             cps1_update_palette(SHARED_PALETTE_RAM);
+#else
+            // Render live 3-layer parallax hardware test screen
+            int16_t camera_x = (int16_t)SH2_MARS_COMM4;
+            cps1_render_hardware_test_screen(sh2_frame_num++, camera_x);
+#endif
 
             // Signal Slave SH-2 to draw sprites over backgrounds
             SH2_MARS_COMM0 = 0x0003;
