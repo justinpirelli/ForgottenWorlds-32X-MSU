@@ -17,7 +17,7 @@ jobs:
       - name: Install m68k & sh2 Cross-Compilers
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc-m68k-linux-gnu binutils-m68k-linux-gnu gcc-sh4-linux-gnu binutils-sh4-linux-gnu
+          sudo apt-get install -y build-essential gcc-m68k-linux-gnu binutils-m68k-linux-gnu gcc-sh-elf binutils-sh-elf
 
       - name: Create Compiler Symlinks for Makefile
         run: |
@@ -26,10 +26,6 @@ jobs:
           ln -s /usr/bin/m68k-linux-gnu-as $HOME/bin/m68k-elf-as
           ln -s /usr/bin/m68k-linux-gnu-ld $HOME/bin/m68k-elf-ld
           ln -s /usr/bin/m68k-linux-gnu-objcopy $HOME/bin/m68k-elf-objcopy
-          ln -s /usr/bin/sh4-linux-gnu-gcc $HOME/bin/sh-elf-gcc
-          ln -s /usr/bin/sh4-linux-gnu-as $HOME/bin/sh-elf-as
-          ln -s /usr/bin/sh4-linux-gnu-ld $HOME/bin/sh-elf-ld
-          ln -s /usr/bin/sh4-linux-gnu-objcopy $HOME/bin/sh-elf-objcopy
           echo "$HOME/bin" >> $GITHUB_PATH
 
       - name: Compile fw32x.32x ROM
