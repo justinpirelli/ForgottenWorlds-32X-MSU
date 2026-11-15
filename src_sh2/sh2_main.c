@@ -1,9 +1,11 @@
 #include <stdint.h>
 #include "cps1_blitter.h"
 #include "cps1_scroll.h"
+#include "pwm_audio.h"
 
 // 32X SH-2 System & VDP Registers (Cache-Through Space)
 #define SH2_MARS_COMM0      (*(volatile uint16_t *)0x20004020) // Command from 68000
+#define SH2_MARS_COMM2      (*(volatile uint16_t *)0x20004022) // SFX / Voice ID Mailbox
 #define SH2_MARS_COMM4      (*(volatile uint16_t *)0x20004024) // Camera X Pan (0-64)
 #define SH2_VDP_MODE        (*(volatile uint16_t *)0x20004100) // VDP Display Mode
 #define SH2_VDP_FBCTL       (*(volatile uint16_t *)0x2000410A) // Framebuffer Swap Control
@@ -33,6 +35,9 @@ void init_32x_vdp(void) {
             line_table[line] = 0x0100 + (line * 160);
         }
     }
+    
+    // Initialize 32X Dual-Channel PWM Audio (~22.05 kHz Stereo SFX & Voice Mixer)
+    pwm_audio_init();
 }
 
 // ============================================================================
@@ -81,6 +86,17 @@ void slave_sh2_main(void) {
                 obj_count,
                 camera_x
             );
+            
+            // Check if 68000 triggered an OKI voice sample / SFX via MARS_COMM2
+            uint16_t sfx_cmd = SH2_MARS_COMM2;
+            if (sfx_cmd & 0x8000) {
+                uint8_t sfx_id = (uint8_t)(sfx_cmd & 0x7F);
+                pwm_play_sfx(sfx_id, CART_SFX_TABLE, 128);
+                SH2_MARS_COMM2 = 0x0000; // Acknowledge SFX trigger
+            }
+
+            // Mix 1 frame (367 stereo samples) into 32X PWM hardware FIFO
+            pwm_mix_frame();
 
             // Signal 68000 that full frame render is finished
             SH2_MARS_COMM0 = 0x0000;
