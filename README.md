@@ -1,4 +1,4 @@
-# Forgotten Worlds: Tower of Power Edition (Sega 32X + Sega CD Mode 1)
+# Forgotten Worlds: CPS-1 EDITION (Sega 32X + Sega CD Mode 1)
 
 An open-source homebrew runtime and porting framework designed to bring a **1:1 arcade-perfect port** of Capcom's *Forgotten Worlds* (CPS-1) to original **Sega Genesis + Sega CD + 32X ("Tower of Power")** hardware—combining the **Capcom CPS-1 arcade graphics & 2-player gameplay** on the 32X with the **PC Engine Super CD-ROM² arranged soundtrack** streaming via **Sega CD Mode 1 (MSU-MD)** and **32X PWM stereo voice/SFX**.
 
