@@ -42,9 +42,9 @@ vectors:
 | 0x000100 - 0x0001FF: Standard Sega Genesis / 32X ROM Header
 | ----------------------------------------------------------------------------
         .ascii  "SEGA 32X        "      | 0x100: Console Name (16 bytes)
-        .ascii  "(C)HOMEBREW 2026"      | 0x110: Copyright & Date (16 bytes)
-        .ascii  "FORGOTTEN WORLDS 32X - TOWER OF POWER EDITION   " | 0x120: Domestic Name (48 bytes)
-        .ascii  "FORGOTTEN WORLDS 32X - TOWER OF POWER EDITION   " | 0x150: Overseas Name (48 bytes)
+        .ascii  "(C)CAPCOM 1988"      | 0x110: Copyright & Date (16 bytes)
+        .ascii  "FORGOTTEN WORLDS - CPS1 EDITION   " | 0x120: Domestic Name (48 bytes)
+        .ascii  "FORGOTTEN WORLDS - CPS1 EDITION   " | 0x150: Overseas Name (48 bytes)
         .ascii  "GM MK-84500-00"        | 0x180: Product Type & Serial (14 bytes)
         .word   0x0000                  | 0x18E: Checksum (Patched by build script)
         .ascii  "J6              "      | 0x190: I/O Support ("J" = 3-btn, "6" = 6-btn)
