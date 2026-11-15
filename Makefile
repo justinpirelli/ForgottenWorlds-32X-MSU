@@ -15,7 +15,7 @@ SH2_OBJCOPY  = sh-elf-objcopy
 
 # Compiler Flags
 M68K_CFLAGS  = -m68000 -O2 -Wall -Wextra -fno-leading-underscore -ffreestanding -nostdlib
-SH2_CFLAGS   = -m2 -mb -O2 -Wall -Wextra -fno-leading-underscore -ffreestanding -nostdlib
+SH2_CFLAGS   = -m2 -mb -O2 -Wall -Wextra -ffreestanding -nostdlib
 
 # Directories
 BUILD_DIR    = build
