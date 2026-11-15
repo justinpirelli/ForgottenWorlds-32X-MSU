@@ -13,7 +13,7 @@ An open-source effort to bring a 1:1 arcade perfect port of Capcom's "Forgotten 
 - [x] **Sega CD Mode 1 Sub-CPU BIOS Payload** (`src_68k/msu_mode1.s` mailbox complete; `src_scd/sub_cpu.s`, `_CDBIOS` payload structured)
 - [x] **32X Boot Header, Linker Script & Build System** (`src_68k/boot_32x.s`, `Makefile`, `32x.ld`)
 - [x] **GitHub Actions Cloud Compiler** (`.github/workflows/build.yml` for automated `.32x` ROM builds)
-- [ ] **SH-2 Background Scroll Layer Renderer** (Scroll 1, Scroll 2, Scroll 3 tilemap blitting)
+- [x] **SH-2 Background Scroll Layer Renderer** (Scroll 1, Scroll 2, Scroll 3 tilemap blitting)
 - [ ] **CPS-1 68000 Disassembly & Hardware Register Relocation** (`patches/` for `forgottn.zip`)
 
 ## How to Build (Requires `marsdev`)
