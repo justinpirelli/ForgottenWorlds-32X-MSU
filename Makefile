@@ -26,7 +26,7 @@ TARGET_ROM   = $(OUT_DIR)/fw32x.32x
 SCD_SRC      = src_scd/sub_cpu.s
 SH2_ASM_SRC  = src_sh2/sh2_boot.s
 SH2_C_SRC    = src_sh2/sh2_main.c src_sh2/cps1_blitter.c src_sh2/cps1_scroll.c src_sh2/pwm_audio.c
-M68K_ASM_SRC = src_68k/boot_32x.s src_68k/msu_mode1.s
+M68K_ASM_SRC = src_68k/boot_32x.s src_68k/msu_mode1.s src_68k/cps1_bridge.s
 M68K_C_SRC   = src_68k/main_68k.c
 
 .PHONY: all clean dirs
@@ -87,7 +87,10 @@ $(BUILD_DIR)/msu_mode1.o: src_68k/msu_mode1.s $(BUILD_DIR)/sub_cpu.bin
 $(BUILD_DIR)/main_68k.o: src_68k/main_68k.c
 	$(M68K_CC) $(M68K_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/fw32x.elf: $(BUILD_DIR)/boot_32x.o $(BUILD_DIR)/msu_mode1.o $(BUILD_DIR)/main_68k.o $(BUILD_DIR)/sh2_blob.o
+$(BUILD_DIR)/cps1_bridge.o: src_68k/cps1_bridge.s
+	$(M68K_AS) -m68000 $< -o $@
+
+$(BUILD_DIR)/fw32x.elf: $(BUILD_DIR)/boot_32x.o $(BUILD_DIR)/msu_mode1.o $(BUILD_DIR)/cps1_bridge.o $(BUILD_DIR)/main_68k.o $(BUILD_DIR)/sh2_blob.o
 	$(M68K_LD) -T 32x.ld $^ -o $@
 
 $(TARGET_ROM): $(BUILD_DIR)/fw32x.elf
