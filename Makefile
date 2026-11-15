@@ -1,5 +1,5 @@
 # ============================================================================
-# Forgotten Worlds: Tower of Power Edition (32X + Sega CD Mode 1) Makefile
+# Forgotten Worlds: CPS1 EDITION (32X + Sega CD Mode 1) Makefile
 # ============================================================================
 
 # Toolchains (Standard marsdev / GCC cross-compiler prefixes)
