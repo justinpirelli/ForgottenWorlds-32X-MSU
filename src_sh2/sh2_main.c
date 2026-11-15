@@ -1,4 +1,3 @@
-
 #include <stdint.h>
 #include "cps1_blitter.h"
 
@@ -32,7 +31,6 @@ void init_32x_vdp(void) {
         }
     }
 }
-
 
 // ============================================================================
 // Master SH-2 Entry Point (VDP Control, Palette Sync & Background Layers)
