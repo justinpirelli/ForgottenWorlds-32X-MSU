@@ -83,20 +83,20 @@ mars_header:
 | ----------------------------------------------------------------------------
         .org    0x000400
 _start:
-        move    #0x2700, sr             | Disable interrupts during init
+        move.w  #0x2700, %sr            | Disable interrupts during init
 
         | Check Genesis Hardware Version & Write 'SEGA' to TMSS ($A14000)
-        move.b  0xA10001, d0
-        andi.b  #0x0F, d0
+        move.b  (0xA10001).l, %d0
+        andi.b  #0x0F, %d0
         beq.s   .skip_tmss
-        move.l  #0x53454741, 0xA14000   | 'SEGA'
+        move.l  #0x53454741, (0xA14000).l   | 'SEGA'
 .skip_tmss:
         | Clear 68000 Work RAM ($FF0000 - $FFFF00)
-        lea     0xFF0000, a0
-        move.w  #0x3FBF, d0
+        lea     (0xFF0000).l, %a0
+        move.w  #0x3FBF, %d0
 .clear_ram:
-        clr.l   (a0)+
-        dbra    d0, .clear_ram
+        clr.l   (%a0)+
+        dbra    %d0, .clear_ram
 
         | Jump to C Entry Point (src_68k/main_68k.c)
         jsr     main
