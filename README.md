@@ -1,4 +1,4 @@
-# Forgotten Worlds: CPS1 EDITION (Sega 32X + Sega CD Mode 1)
+# Forgotten Worlds: Tower of Power Edition (Sega 32X + Sega CD Mode 1)
 
 An open-source homebrew runtime and porting framework designed to bring a **1:1 arcade-perfect port** of Capcom's *Forgotten Worlds* (CPS-1) to original **Sega Genesis + Sega CD + 32X ("Tower of Power")** hardware—combining the **Capcom CPS-1 arcade graphics & 2-player gameplay** on the 32X with the **PC Engine Super CD-ROM² arranged soundtrack** streaming via **Sega CD Mode 1 (MSU-MD)** and **32X PWM stereo voice/SFX**.
 
@@ -25,13 +25,14 @@ An open-source homebrew runtime and porting framework designed to bring a **1:1 
 - [x] **32X 4-Channel Stereo PWM Voice & SFX Mixer** (`src_sh2/pwm_audio.c`)
 - [x] **Legal MAME CPS-1 Asset & ADPCM Extraction Tool** (`tools/extract_cps1.py`)
 - [x] **CPS-1 68000 Compatibility Shim & Binary Relocator** (`src_68k/cps1_bridge.s` & `tools/patch_cps1_rom.py`)
+- [x] **Companion CD-R `.cue` Sheet & Dummy Track 01 Documentation** (`docs/ForgottenWorlds_MSU.cue` & `docs/PC_ENGINE_CD_TRACKLIST.md`)
 
 ---
 
 ## How to Build & Play on Real Tower of Power Hardware
 
 ### What You Need
-- **Console Stack:** Sega Genesis / Mega Drive + Sega CD / Mega-CD + Sega 32X (properly connected with the 32X-to-Genesis link cable and Model 1 stereo mixing cable if using a Model 1 Genesis).
+- **Console Stack:** Sega Genesis / Mega Drive + Sega CD / Mega-CD + Sega 32X (connected with the 32X-to-Genesis link cable and Model 1 stereo mixing cable if using a Model 1 Genesis).
 - **Flashcart:** Any standard Genesis/32X flashcart (e.g., EverDrive X3/X5/X7) inserted into the **top of the 32X**. *(Note: Do not use a Mega EverDrive Pro's internal Sega CD FPGA core while attached to a physical Sega CD unit; use a standard flashcart or disable FPGA CD emulation so the physical Sega CD drive handles Mode 1 audio).*
 - **Controllers:** One or two **Sega 6-Button Controllers** (recommended for 360-degree satellite rotation).
 - **Your Own Legal Game Backups:**
@@ -41,7 +42,7 @@ An open-source homebrew runtime and porting framework designed to bring a **1:1 
 ---
 
 ### Step 1: Build the `.32x` Cartridge ROM
-1. Clone this repository on a computer with `m68k-elf` and `sh-elf` cross-compilers installed (or `marsdev` / Ubuntu `gcc-m68k-linux-gnu` + `gcc-sh-elf`).
+1. Clone this repository on a computer with `m68k-elf` and `sh-elf` cross-compilers installed (`marsdev` or Ubuntu `gcc-m68k-linux-gnu` + `gcc-sh-elf`).
 2. Extract and convert your legal `forgottn.zip` arcade ROMs into linear 32X assets:
    ```bash
    python3 tools/extract_cps1.py path/to/forgottn.zip
@@ -59,9 +60,12 @@ An open-source homebrew runtime and porting framework designed to bring a **1:1 
 ---
 
 ### Step 2: Burn the Companion PC Engine CD Audio Disc
-1. Rip the Redbook audio tracks from your *Forgotten Worlds* (PC Engine Super CD-ROM²) disc as `44.1 kHz, 16-bit Stereo PCM` files following the track map in [`docs/PC_ENGINE_CD_TRACKLIST.md`](docs/PC_ENGINE_CD_TRACKLIST.md).
-2. Pair **Track 01** (a 2-second dummy Mode 1 data track) with **Tracks 02–12** (the PC Engine CD music tracks) in a `.cue` sheet.
-3. Burn the `.cue`/`.bin` image onto a high-quality **CD-R** at the slowest supported write speed (e.g., **4x–8x**) using ImgBurn or similar disc-burning software so your Sega CD laser reads every track reliably.
+1. Rip the Redbook audio tracks from your *Forgotten Worlds* (PC Engine Super CD-ROM²) disc as `44.1 kHz, 16-bit Stereo WAV` files (`track02.wav` through `track12.wav`) following [`docs/PC_ENGINE_CD_TRACKLIST.md`](docs/PC_ENGINE_CD_TRACKLIST.md).
+2. Generate the required 4-second (`614,400` byte) dummy `MODE1/2048` data track (`track01.bin`) in the same folder:
+   ```bash
+   python3 -c "open('track01.bin','wb').write(b'\x00'*614400)"
+   ```
+3. Copy [`docs/ForgottenWorlds_MSU.cue`](docs/ForgottenWorlds_MSU.cue) into that folder and burn it onto a high-quality **CD-R** at the slowest supported write speed (e.g., **4x–8x**) using ImgBurn or similar disc-burning software.
 
 ---
 
@@ -87,6 +91,7 @@ An open-source homebrew runtime and porting framework designed to bring a **1:1 
 
 ```text
 ├── .github/workflows/build.yml   # Automated cloud cross-compiler (outputs fw32x.32x artifact)
+├── LICENSE                       # MIT Open-Source License
 ├── Makefile                      # 3-stage build script (Sega CD Sub-CPU -> Dual SH-2 -> Genesis 68k)
 ├── 32x.ld                        # 32X + Genesis memory map & linker script
 ├── src_68k/
@@ -106,6 +111,13 @@ An open-source homebrew runtime and porting framework designed to bring a **1:1 
 │   ├── extract_cps1.py           # Legal user-supplied MAME ROM converter (GFX, OKI ADPCM, 68k)
 │   └── patch_cps1_rom.py         # 68000 binary relocator & CPS-1 VRAM/register patcher
 └── docs/
-    ├── PC_ENGINE_CD_TRACKLIST.md # Redbook CD track mapping for Sega CD Mode 1 companion disc
+    ├── ForgottenWorlds_MSU.cue   # Ready-to-burn Mixed-Mode CD-R cue sheet template
+    ├── PC_ENGINE_CD_TRACKLIST.md # Redbook CD track mapping & dummy Track 01 instructions
     └── CPS1_PORTING_GUIDE.md     # CPS-1 arcade register -> 32X SDRAM mailbox memory map
 ```
+
+---
+
+## License
+
+This project's original source code, drivers, and conversion tools are released under the [MIT License](LICENSE). Users must supply their own legally dumped arcade ROMs and CD audio backups.
