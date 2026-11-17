@@ -3,85 +3,113 @@
 Forgotten Worlds (CPS-1) 68000 Binary Relocator & Hardware Register Patcher
 Reads:  assets/cps1_rom/cps1_prog.bin
 Writes: assets/cps1_rom/cps1_patched.bin
-
-Performs static binary translation of CPS-1 68000 memory references:
-  1. Relocates 32-bit ROM pointers from 0x000000..0x0FFFFF -> 0x020000..0x11FFFF
-  2. Remaps CPS-1 Video/Object/Palette RAM (0x00900000..0x00903FFF) -> 0x00FF8000
-  3. Logs all CPS-B hardware register accesses (0x00800000..0x008001FF) for bridge hooks
 """
 
 import os
 import sys
 import struct
 
-RELOC_OFFSET   = 0x00020000  # Relocate CPS-1 Program ROM to 128KB mark in 32X ROM
-CPS1_ROM_LIMIT = 0x00100000  # 1MB CPS-1 68000 ROM space
-CPS1_VRAM_BASE = 0x00900000
-CPS1_VRAM_END  = 0x00904000
-GEN_VRAM_STAGE = 0x00FF8000  # Genesis Work RAM staging buffer
+RELOC_OFFSET     = 0x00020000
+CPS1_ROM_LIMIT   = 0x00100000
+
+CPS1_VRAM_BASE   = 0x00900000
+CPS1_VRAM_END    = 0x00940000
+GEN_VRAM_STAGE   = 0x00FF8000
+GEN_VRAM_MASK    = 0x00003FFF
+
+CPS1_REG_BASE    = 0x00800100
+CPS1_REG_END     = 0x00800124
+GEN_REG_SHADOW   = 0x00FFBF00
+
+CPS1_WRAM_BASE   = 0x00FF0000
+CPS1_WRAM_END    = 0x01000000
+GEN_CPS1_WRAM    = 0x00FF0000
+GEN_WRAM_MASK    = 0x00007FFF
+
+BRIDGE_READ_P1   = 0x00000800
+BRIDGE_READ_P2   = 0x00000806
+BRIDGE_DIAL_P1   = 0x0000080C
+BRIDGE_DIAL_P2   = 0x00000812
+BRIDGE_SND_LATCH = 0x00000818
 
 
+def is_long_addr_opcode(op: int) -> bool:
+    if (op & 0xFFC0) in (0x4EC0, 0x4E80):
+        return True
+    if (op & 0xF1C0) == 0x41C0:
+        return True
+    if (op & 0xFFC0) == 0x4879:
+        return True
+    if (op & 0x003F) == 0x0039:
+        return True
+    if (op & 0x0FC0) == 0x0E40:
+        return True
+    return False
 def patch_cps1_program(prog_data: bytes) -> bytearray:
     buf = bytearray(prog_data)
     length = len(buf)
+    relocated_ptrs = remapped_vram = remapped_regs = remapped_wram = patched_io = 0
 
-    relocated_ptrs = 0
-    remapped_vram  = 0
-    hw_reg_hits    = {}
+    if length >= 8:
+        init_sp, init_pc = struct.unpack_from(">II", buf, 0)
+        if CPS1_WRAM_BASE <= init_sp <= CPS1_WRAM_END:
+            struct.pack_into(">I", buf, 0, GEN_CPS1_WRAM + ((init_sp - 2) & GEN_WRAM_MASK))
+        if 0x00000008 <= init_pc < CPS1_ROM_LIMIT:
+            struct.pack_into(">I", buf, 4, init_pc + RELOC_OFFSET)
 
-    # Scan word-aligned 32-bit immediate operands & pointer tables
-    for offset in range(0, length - 3, 2):
+    io_read_map = {
+        0x00800000: BRIDGE_READ_P1, 0x00800001: BRIDGE_READ_P1,
+        0x00800018: BRIDGE_READ_P2, 0x00800019: BRIDGE_READ_P2,
+        0x00800052: BRIDGE_DIAL_P1, 0x00800053: BRIDGE_DIAL_P1,
+        0x00800054: BRIDGE_DIAL_P2, 0x00800055: BRIDGE_DIAL_P2,
+    }
+
+    for offset in range(0x100, length - 5, 2):
+        op = struct.unpack_from(">H", buf, offset)[0]
+        addr = struct.unpack_from(">I", buf, offset + 2)[0]
+        if op == 0x1039 and addr in io_read_map:
+            struct.pack_into(">HI", buf, offset, 0x4EB9, io_read_map[addr])
+            patched_io += 1
+        elif op == 0x13C0 and addr == 0x00800180:
+            struct.pack_into(">HI", buf, offset, 0x4EB9, BRIDGE_SND_LATCH)
+            patched_io += 1
+
+    for offset in range(0x100, length - 3, 2):
         val = struct.unpack_from(">I", buf, offset)[0]
+        prev_op = struct.unpack_from(">H", buf, offset - 2)[0]
+        if prev_op == 0x4EB9 and BRIDGE_READ_P1 <= val <= BRIDGE_SND_LATCH:
+            continue
 
-        # 1. Relocate 32-bit Program ROM pointers (skip vector table header < 0x100)
-        if offset >= 0x100 and 0x00000100 <= val < CPS1_ROM_LIMIT:
-            # Verify preceding opcode is an absolute long jump/call/move/lea (heuristic)
-            prev_op = struct.unpack_from(">H", buf, offset - 2)[0]
-            is_abs_long_op = (
-                (prev_op & 0xFFC0) in (0x4EC0, 0x4E80) or  # JMP (xxx).L / JSR (xxx).L
-                (prev_op & 0xF1C0) == 0x41C0 or            # LEA (xxx).L, An
-                (prev_op & 0x003F) == 0x0039 or            # xxx (xxx).L source
-                (prev_op & 0x0FC0) == 0x0E40               # xxx (xxx).L dest
+        if 0x00000100 <= val < CPS1_ROM_LIMIT and (val & 1) == 0:
+            in_ptr_table = (offset >= 0x104) and (
+                RELOC_OFFSET + 0x100 <= struct.unpack_from(">I", buf, offset - 4)[0] < RELOC_OFFSET + CPS1_ROM_LIMIT
             )
-            if is_abs_long_op:
+            if is_long_addr_opcode(prev_op) or in_ptr_table:
                 struct.pack_into(">I", buf, offset, val + RELOC_OFFSET)
                 relocated_ptrs += 1
-
-        # 2. Remap CPS-1 Palette & Object VRAM (0x00900000..0x00903FFF -> 0x00FF8000)
         elif CPS1_VRAM_BASE <= val < CPS1_VRAM_END:
-            new_addr = GEN_VRAM_STAGE + (val - CPS1_VRAM_BASE)
-            struct.pack_into(">I", buf, offset, new_addr)
+            struct.pack_into(">I", buf, offset, GEN_VRAM_STAGE + ((val - CPS1_VRAM_BASE) & GEN_VRAM_MASK))
             remapped_vram += 1
+        elif CPS1_REG_BASE <= val < CPS1_REG_END:
+            struct.pack_into(">I", buf, offset, GEN_REG_SHADOW + (val - CPS1_REG_BASE))
+            remapped_regs += 1
+        elif (CPS1_WRAM_BASE + 0x8000) <= val < CPS1_WRAM_END and is_long_addr_opcode(prev_op):
+            struct.pack_into(">I", buf, offset, GEN_CPS1_WRAM + ((val - CPS1_WRAM_BASE) & GEN_WRAM_MASK))
+            remapped_wram += 1
 
-        # 3. Record CPS-B Hardware Register & Z80 Sound Latch accesses (0x00800000..0x008001FF)
-        elif 0x00800000 <= val <= 0x008001FF:
-            hw_reg_hits[val] = hw_reg_hits.get(val, 0) + 1
-
-    print(f"[OK] Relocated {relocated_ptrs} absolute 68000 ROM pointers (+0x{RELOC_OFFSET:06X})")
-    print(f"[OK] Remapped  {remapped_vram} CPS-1 VRAM accesses -> 0x{GEN_VRAM_STAGE:08X}")
-    print("[INFO] Detected CPS-B hardware register references:")
-    for reg in sorted(hw_reg_hits):
-        print(f"       0x{reg:08X} : {hw_reg_hits[reg]} references")
-
+    print(f"[OK] Patched={patched_io}, Reloc={relocated_ptrs}, VRAM={remapped_vram}, Regs={remapped_regs}, WRAM={remapped_wram}")
     return buf
 
 
 def main():
-    in_path  = sys.argv if len(sys.argv) > 1 else "assets/cps1_rom/cps1_prog.bin"
+    in_path = sys.argv[1] if len(sys.argv) > 1 else "assets/cps1_rom/cps1_prog.bin"
     out_path = "assets/cps1_rom/cps1_patched.bin"
-
     if not os.path.isfile(in_path):
-        print(f"Error: {in_path} not found. Run tools/extract_cps1.py first.")
+        print(f"Error: {in_path} not found.")
         sys.exit(1)
-
-    with open(in_path, "rb") as f:
-        raw_prog = f.read()
-
-    patched = patch_cps1_program(raw_prog)
-    with open(out_path, "wb") as f:
-        f.write(patched)
-
-    print(f"\n[DONE] Wrote patched 68000 binary to {out_path} ({len(patched)} bytes)")
+    patched = patch_cps1_program(open(in_path, "rb").read())
+    open(out_path, "wb").write(patched)
+    print(f"[DONE] Wrote {out_path} ({len(patched)} bytes)")
 
 
 if __name__ == "__main__":
