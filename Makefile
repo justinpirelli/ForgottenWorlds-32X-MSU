@@ -2,7 +2,6 @@
 # Forgotten Worlds: CPS1 EDITION (32X + Sega CD Mode 1) Makefile
 # ============================================================================
 
-# Toolchains (Standard marsdev / GCC cross-compiler prefixes)
 M68K_CC      = m68k-elf-gcc
 M68K_AS      = m68k-elf-as --register-prefix-optional
 M68K_LD      = m68k-elf-ld
@@ -13,21 +12,23 @@ SH2_AS       = sh-elf-as
 SH2_LD       = sh-elf-ld
 SH2_OBJCOPY  = sh-elf-objcopy
 
-# Compiler Flags
-M68K_CFLAGS  = -m68000 -O2 -Wall -Wextra -fno-leading-underscore -ffreestanding -nostdlib
-SH2_CFLAGS   = -m2 -mb -O2 -Wall -Wextra -ffreestanding -nostdlib
+CFLAGS_EXTRA ?=
 
-# Directories
+M68K_CFLAGS  = -m68000 -O2 -Wall -Wextra -fno-leading-underscore -ffreestanding -nostdlib -fno-stack-protector -fno-pic -fno-builtin $(CFLAGS_EXTRA)
+SH2_CFLAGS   = -m2 -mb -O2 -Wall -Wextra -ffreestanding -nostdlib -fno-stack-protector -fno-builtin $(CFLAGS_EXTRA)
+
 BUILD_DIR    = build
 OUT_DIR      = out
 TARGET_ROM   = $(OUT_DIR)/fw32x.32x
 
-# Source Files
 SCD_SRC      = src_scd/sub_cpu.s
 SH2_ASM_SRC  = src_sh2/sh2_boot.s
-SH2_C_SRC    = src_sh2/sh2_main.c src_sh2/cps1_blitter.c src_sh2/cps1_scroll.c src_sh2/pwm_audio.c
-M68K_ASM_SRC = src_68k/boot_32x.s src_68k/msu_mode1.s src_68k/cps1_bridge.s
-M68K_C_SRC   = src_68k/main_68k.c
+M68K_OBJS    = $(BUILD_DIR)/boot_32x.o $(BUILD_DIR)/msu_mode1.o $(BUILD_DIR)/cps1_bridge.o $(BUILD_DIR)/main_68k.o $(BUILD_DIR)/sh2_blob.o
+
+# Optional User-Supplied CPS-1 Arcade Assets (Enabled via CFLAGS_EXTRA="-DUSE_CPS1_ARCADE_ROM")
+ifneq (,$(findstring USE_CPS1_ARCADE_ROM,$(CFLAGS_EXTRA)))
+M68K_OBJS   += $(BUILD_DIR)/cps1_prog_blob.o $(BUILD_DIR)/cps1_gfx_blob.o $(BUILD_DIR)/cps1_sfx_blob.o
+endif
 
 .PHONY: all clean dirs
 
@@ -51,7 +52,7 @@ $(BUILD_DIR)/sub_cpu.bin: $(BUILD_DIR)/sub_cpu.o
 $(BUILD_DIR)/sh2_boot.o: $(SH2_ASM_SRC)
 	$(SH2_AS) --isa=sh2 --big $< -o $@
 
-$(BUILD_DIR)/sh2_main.o: src_sh2/sh2_main.c src_sh2/cps1_blitter.h
+$(BUILD_DIR)/sh2_main.o: src_sh2/sh2_main.c src_sh2/cps1_blitter.h src_sh2/cps1_scroll.h src_sh2/pwm_audio.h
 	$(SH2_CC) $(SH2_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/cps1_blitter.o: src_sh2/cps1_blitter.c src_sh2/cps1_blitter.h
@@ -69,10 +70,27 @@ $(BUILD_DIR)/sh2_code.elf: $(BUILD_DIR)/sh2_boot.o $(BUILD_DIR)/sh2_main.o $(BUI
 $(BUILD_DIR)/sh2_code.bin: $(BUILD_DIR)/sh2_code.elf
 	$(SH2_OBJCOPY) -O binary -j .text -j .rodata -j .data $< $@
 
-# Wrap SH-2 binary into a 68000 linkable object (.sh2_binary section)
 $(BUILD_DIR)/sh2_blob.o: $(BUILD_DIR)/sh2_code.bin
 	$(M68K_OBJCOPY) -I binary -O elf32-m68k -B m68k \
 		--rename-section .data=.sh2_binary,alloc,load,readonly,data,contents \
+		$< $@
+
+# ----------------------------------------------------------------------------
+# Optional Stage 2B: Wrap Extracted CPS-1 ROM, GFX, and PCM Assets
+# ----------------------------------------------------------------------------
+$(BUILD_DIR)/cps1_prog_blob.o: assets/cps1_rom/cps1_patched.bin
+	$(M68K_OBJCOPY) -I binary -O elf32-m68k -B m68k \
+		--rename-section .data=.cps1_prog_rom,alloc,load,readonly,data,contents \
+		$< $@
+
+$(BUILD_DIR)/cps1_gfx_blob.o: assets/gfx/cps1_tiles.bin
+	$(M68K_OBJCOPY) -I binary -O elf32-m68k -B m68k \
+		--rename-section .data=.cps1_gfx_rom,alloc,load,readonly,data,contents \
+		$< $@
+
+$(BUILD_DIR)/cps1_sfx_blob.o: assets/sfx/cps1_pcm.bin
+	$(M68K_OBJCOPY) -I binary -O elf32-m68k -B m68k \
+		--rename-section .data=.cps1_sfx_rom,alloc,load,readonly,data,contents \
 		$< $@
 
 # ----------------------------------------------------------------------------
@@ -90,11 +108,12 @@ $(BUILD_DIR)/main_68k.o: src_68k/main_68k.c
 $(BUILD_DIR)/cps1_bridge.o: src_68k/cps1_bridge.s
 	$(M68K_AS) -m68000 $< -o $@
 
-$(BUILD_DIR)/fw32x.elf: $(BUILD_DIR)/boot_32x.o $(BUILD_DIR)/msu_mode1.o $(BUILD_DIR)/cps1_bridge.o $(BUILD_DIR)/main_68k.o $(BUILD_DIR)/sh2_blob.o
+$(BUILD_DIR)/fw32x.elf: $(M68K_OBJS)
 	$(M68K_LD) -T 32x.ld $^ -o $@
 
 $(TARGET_ROM): $(BUILD_DIR)/fw32x.elf
 	$(M68K_OBJCOPY) -O binary $< $@
+	python3 -c 'import struct; d=bytearray(open("$@","rb").read()); d+=(b"\x00"*((512-(len(d)%512))%512)); struct.pack_into(">I",d,0x1A4,len(d)-1); csum=sum(struct.unpack(">"+str((len(d)-0x200)//2)+"H",d[0x200:]))&0xFFFF; struct.pack_into(">H",d,0x18E,csum); open("$@","wb").write(d)'
 
 clean:
 	rm -rf $(BUILD_DIR) $(OUT_DIR)
