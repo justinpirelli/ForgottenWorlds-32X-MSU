@@ -2,9 +2,9 @@
 """
 Forgotten Worlds (CPS-1) Asset & ROM Extractor for Sega 32X + Sega CD Mode 1
 Converts a user-supplied MAME 'forgottn.zip' archive into linear 32X assets:
-  1. assets/cps1_rom/cps1_prog.bin  - Interleaved 68000 arcade program ROM
-  2. assets/gfx/cps1_tiles.bin      - Linear 8-bit indexed 16x16 tiles/sprites
-  3. assets/sfx/cps1_pcm.bin        - Decoded 8-bit signed PCM voice/SFX bank
+  1. assets/cps1_rom/cps1_prog.bin - Byte-interleaved 68000 arcade program ROM
+  2. assets/gfx/cps1_tiles.bin     - 4-way interleaved linear 8-bit 16x16 tiles
+  3. assets/sfx/cps1_pcm.bin       - 128-entry PWM_SampleAsset table + 8-bit PCM
 """
 
 import os
@@ -12,7 +12,6 @@ import sys
 import zipfile
 import struct
 
-# Standard OKI MSM6295 / Dialogic 4-bit ADPCM Step Size & Index Tables
 OKI_INDEX_TABLE = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8]
 OKI_STEP_TABLE = [
     16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66,
@@ -21,15 +20,36 @@ OKI_STEP_TABLE = [
     1552
 ]
 
+CART_SFX_BASE_ADDR = 0x22300000
+MAX_OKI_PHRASES    = 128
+HEADER_TABLE_BYTES = MAX_OKI_PHRASES * 12  # 128 * sizeof(PWM_SampleAsset) = 1536 bytes
 
-def decode_oki_adpcm(adpcm_bytes: bytes) -> bytes:
-    """Decode OKI MSM6295 4-bit ADPCM data into 8-bit signed PCM for 32X PWM."""
+
+def interleave_even_odd(even_bytes: bytes, odd_bytes: bytes) -> bytes:
+    size = min(len(even_bytes), len(odd_bytes))
+    out = bytearray(size * 2)
+    out[0::2] = even_bytes[:size]
+    out[1::2] = odd_bytes[:size]
+    return bytes(out)
+
+
+def interleave_4way(rom0: bytes, rom1: bytes, rom2: bytes, rom3: bytes) -> bytes:
+    size = min(len(rom0), len(rom1), len(rom2), len(rom3))
+    out = bytearray(size * 4)
+    out[0::4] = rom0[:size]
+    out[1::4] = rom1[:size]
+    out[2::4] = rom2[:size]
+    out[3::4] = rom3[:size]
+    return bytes(out)
+
+
+def decode_oki_phrase(adpcm_bytes: bytes) -> bytes:
     predictor = 0
     step_index = 0
-    out = bytearray()
+    out = bytearray(len(adpcm_bytes) * 2)
+    idx = 0
 
     for byte in adpcm_bytes:
-        # High nibble first, then low nibble on MSM6295
         for nibble in ((byte >> 4) & 0x0F, byte & 0x0F):
             step = OKI_STEP_TABLE[step_index]
             diff = step >> 3
@@ -39,54 +59,66 @@ def decode_oki_adpcm(adpcm_bytes: bytes) -> bytes:
                 diff += step >> 1
             if nibble & 4:
                 diff += step
-
-            if nibble & 8:
-                predictor -= diff
-            else:
-                predictor += diff
-
-            # Clamp 12-bit OKI range (-2048..2047) and scale to 8-bit signed (-128..127)
+            predictor = predictor - diff if (nibble & 8) else predictor + diff
             predictor = max(-2048, min(2047, predictor))
-            out.append((predictor >> 4) & 0xFF)
-
+            out[idx] = (predictor >> 4) & 0xFF
+            idx += 1
             step_index = max(0, min(48, step_index + OKI_INDEX_TABLE[nibble]))
 
     return bytes(out)
+def build_sfx_bank(oki_rom: bytes) -> bytes:
+    table_buf = bytearray(HEADER_TABLE_BYTES)
+    pcm_blob = bytearray()
+    valid_phrases = 0
+
+    for phrase_id in range(MAX_OKI_PHRASES):
+        entry_off = phrase_id * 8
+        if entry_off + 6 > len(oki_rom):
+            break
+
+        start_addr = ((oki_rom[entry_off] << 16) | (oki_rom[entry_off + 1] << 8) | oki_rom[entry_off + 2]) & 0x03FFFF
+        end_addr = ((oki_rom[entry_off + 3] << 16) | (oki_rom[entry_off + 4] << 8) | oki_rom[entry_off + 5]) & 0x03FFFF
+
+        if start_addr < 0x400 or end_addr <= start_addr or end_addr > len(oki_rom):
+            continue
+
+        decoded = decode_oki_phrase(oki_rom[start_addr:end_addr])
+        sh2_ptr = CART_SFX_BASE_ADDR + HEADER_TABLE_BYTES + len(pcm_blob)
+        struct.pack_into(">IIBBH", table_buf, phrase_id * 12, sh2_ptr, len(decoded), 0, 0, 0)
+        pcm_blob.extend(decoded)
+        while len(pcm_blob) & 3:
+            pcm_blob.append(0)
+        valid_phrases += 1
+
+    print(f"[OK] Decoded {valid_phrases} OKI MSM6295 voice/SFX phrases")
+    return bytes(table_buf) + bytes(pcm_blob)
 
 
 def decode_cps1_gfx_to_linear(gfx_data: bytes) -> bytes:
-    """
-    Convert CPS-1 4bpp interleaved planar GFX ROM data into 1-byte-per-pixel
-    linear 16x16 tiles (256 bytes per tile) for fast SH-2 blitting.
-    """
-    num_tiles = len(gfx_data) // 128  # Each 16x16 4bpp CPS-1 tile = 128 bytes
+    num_tiles = len(gfx_data) // 128
     linear_out = bytearray(num_tiles * 256)
 
     for tile in range(num_tiles):
-        base_in = tile * 128
-        base_out = tile * 256
-
+        base_in, base_out = tile * 128, tile * 256
         for row in range(16):
-            # Left 8 pixels (bytes 0..3) and Right 8 pixels (bytes 4..7) per row
             row_offset = base_in + (row * 8)
             for half in range(2):
-                p0 = gfx_data[row_offset + (half * 4) + 0]
-                p1 = gfx_data[row_offset + (half * 4) + 1]
-                p2 = gfx_data[row_offset + (half * 4) + 2]
-                p3 = gfx_data[row_offset + (half * 4) + 3]
-
+                p0, p1, p2, p3 = gfx_data[row_offset + (half * 4):row_offset + (half * 4) + 4]
                 for bit in range(8):
                     shift = 7 - bit
                     pixel = (
-                        (((p0 >> shift) & 1) << 0) |
-                        (((p1 >> shift) & 1) << 1) |
-                        (((p2 >> shift) & 1) << 2) |
-                        (((p3 >> shift) & 1) << 3)
+                        (((p0 >> shift) & 1) << 0) | (((p1 >> shift) & 1) << 1) |
+                        (((p2 >> shift) & 1) << 2) | (((p3 >> shift) & 1) << 3)
                     )
-                    dst_x = (half * 8) + bit
-                    linear_out[base_out + (row * 16) + dst_x] = pixel
-
+                    linear_out[base_out + (row * 16) + (half * 8) + bit] = pixel
     return bytes(linear_out)
+
+
+def find_rom(files_by_lower: dict, *prefixes: str) -> bytes:
+    for name, data in files_by_lower.items():
+        if any(os.path.basename(name).startswith(p) for p in prefixes):
+            return data
+    return b""
 
 
 def main():
@@ -104,46 +136,29 @@ def main():
     os.makedirs("assets/sfx", exist_ok=True)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
-        names = sorted(zf.namelist())
-        print(f"Opened {zip_path} ({len(names)} ROM files found)")
+        files = {name.lower(): zf.read(name) for name in sorted(zf.namelist())}
 
-        # Collect 68000 program ROMs, GFX ROMs, and OKI ADPCM sample ROMs
-        prog_chunks = []
-        gfx_chunks = []
-        oki_chunks = []
+        pairs = [
+            (find_rom(files, "lw_36", "lw-36", "fwe_36", "fwu_36"), find_rom(files, "lw_31", "lw-31", "fwe_31", "fwu_31")),
+            (find_rom(files, "lw_35", "lw-35", "fwe_35", "fwu_35"), find_rom(files, "lw_30", "lw-30", "fwe_30", "fwu_30")),
+            (find_rom(files, "lw_37", "lw-37", "fwe_37", "fwu_37"), find_rom(files, "lw_32", "lw-32", "fwe_32", "fwu_32")),
+        ]
+        prog_bin = bytearray()
+        for ev, od in pairs:
+            if ev and od:
+                prog_bin.extend(interleave_even_odd(ev, od))
+        if prog_bin:
+            open("assets/cps1_rom/cps1_prog.bin", "wb").write(prog_bin)
 
-        for name in names:
-            lower = name.lower()
-            data = zf.read(name)
-            # Forgotten Worlds (lw / fw CPS-1 naming conventions)
-            if any(tag in lower for tag in ("lw_29", "lw_30", "lw_31", "lw_35", "lw_36", "lw_37", "fwe_", "fwu_")):
-                prog_chunks.append((name, data))
-            elif any(tag in lower for tag in ("lw-01", "lw-02", "lw-03", "lw-04", "lw_01", "lw_02", "lw_03", "lw_04")):
-                gfx_chunks.append((name, data))
-            elif any(tag in lower for tag in ("lw_18", "lw_19", "lw-18", "lw-19")):
-                oki_chunks.append((name, data))
+        g0, g1, g2, g3 = find_rom(files, "lw-01", "lw_01"), find_rom(files, "lw-02", "lw_02"), find_rom(files, "lw-03", "lw_03"), find_rom(files, "lw-04", "lw_04")
+        if g0 and g1 and g2 and g3:
+            open("assets/gfx/cps1_tiles.bin", "wb").write(decode_cps1_gfx_to_linear(interleave_4way(g0, g1, g2, g3)))
 
-        if prog_chunks:
-            prog_bin = b"".join(chunk for _, chunk in prog_chunks)
-            with open("assets/cps1_rom/cps1_prog.bin", "wb") as f:
-                f.write(prog_bin)
-            print(f"[OK] Wrote assets/cps1_rom/cps1_prog.bin ({len(prog_bin)} bytes)")
+        oki0, oki1 = find_rom(files, "lw-18", "lw_18"), find_rom(files, "lw-19", "lw_19")
+        if oki0:
+            open("assets/sfx/cps1_pcm.bin", "wb").write(build_sfx_bank(oki0 + oki1))
 
-        if gfx_chunks:
-            raw_gfx = b"".join(chunk for _, chunk in gfx_chunks)
-            linear_gfx = decode_cps1_gfx_to_linear(raw_gfx)
-            with open("assets/gfx/cps1_tiles.bin", "wb") as f:
-                f.write(linear_gfx)
-            print(f"[OK] Wrote assets/gfx/cps1_tiles.bin ({len(linear_gfx)} bytes, {len(linear_gfx)//256} tiles)")
-
-        if oki_chunks:
-            raw_oki = b"".join(chunk for _, chunk in oki_chunks)
-            pcm_audio = decode_oki_adpcm(raw_oki)
-            with open("assets/sfx/cps1_pcm.bin", "wb") as f:
-                f.write(pcm_audio)
-            print(f"[OK] Wrote assets/sfx/cps1_pcm.bin ({len(pcm_audio)} bytes 8-bit PCM)")
-
-    print("\nAsset extraction complete! Ready to link with USE_CPS1_ARCADE_ROM=1.")
+    print("[DONE] Asset extraction complete!")
 
 
 if __name__ == "__main__":
