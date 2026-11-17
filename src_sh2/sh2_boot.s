@@ -6,8 +6,8 @@
 
         .global master_sh2_entry
         .global slave_sh2_entry
-        .extern master_sh2_main
-        .extern slave_sh2_main
+        .extern _master_sh2_main
+        .extern _slave_sh2_main
 
 master_sh2_entry:
         mov.l   master_main_addr, r0
@@ -21,6 +21,6 @@ slave_sh2_entry:
 
         .align 2
 master_main_addr:
-        .long   master_sh2_main
+        .long   _master_sh2_main
 slave_main_addr:
-        .long   slave_sh2_main
+        .long   _slave_sh2_main
